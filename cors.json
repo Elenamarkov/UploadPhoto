@@ -1,0 +1,7 @@
+[
+  {
+    "origin": ["https://твоеusername.github.io"],
+    "method": ["GET", "POST", "PUT", "HEAD"],
+    "maxAgeSeconds": 3600
+  }
+]
