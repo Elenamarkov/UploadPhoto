@@ -14,6 +14,20 @@
     // Firebase Firestore
     import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 
+    // Додај го ова после import-ите, пред const app = initializeApp...
+console.log("Апликацијата стартува...");
+
+// Привремено решение за CORS - користи proxy
+const originalFetch = window.fetch;
+window.fetch = function(url, options) {
+  if (url.toString().includes('firebasestorage.googleapis.com')) {
+    // Додај ги потребните headers
+    options = options || {};
+    options.mode = 'cors';
+    options.credentials = 'omit';
+  }
+  return originalFetch.call(this, url, options);
+};
     const firebaseConfig = {
   apiKey: "AIzaSyA4r8eifiRWU7W2CUWCymwBtL-HtRp0Nng",
   authDomain: "uploadphoto-d6606.firebaseapp.com",
@@ -65,3 +79,4 @@
   <button onclick="uploadFiles()">Прати</button>
 </body>
 </html>
+
