@@ -3,75 +3,124 @@
 <head>
   <meta charset="UTF-8">
   <title>Upload Sliki</title>
-  <script type="module">
-    // Firebase core + Analytics
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics.js";
+ <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-storage.js";
+  import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+  import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 
-    // Firebase Storage
-    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-storage.js";
+  const firebaseConfig = {
+    apiKey: "AIzaSyA4r8eifiRWU7W2CUWCymwBtL-HtRp0Nng",
+    authDomain: "uploadphoto-d6606.firebaseapp.com",
+    projectId: "uploadphoto-d6606",
+    storageBucket: "uploadphoto-d6606.appspot.com",
+    messagingSenderId: "495665845197",
+    appId: "1:495665845197:web:9d96d8004e0612ccddaa84",
+    measurementId: "G-MJRZYYMEXB"
+  };
 
-    // Firebase Firestore
-    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+  const app = initializeApp(firebaseConfig);
+  const storage = getStorage(app);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
 
-    // Додај го ова после import-ите, пред const app = initializeApp...
-console.log("Апликацијата стартува...");
+  const uploadBtn = document.getElementById("uploadBtn");
+  const statusDiv = document.createElement('div');
+  document.querySelector('.upload-box').appendChild(statusDiv);
 
-// Привремено решение за CORS - користи proxy
-const originalFetch = window.fetch;
-window.fetch = function(url, options) {
-  if (url.toString().includes('firebasestorage.googleapis.com')) {
-    // Додај ги потребните headers
-    options = options || {};
-    options.mode = 'cors';
-    options.credentials = 'omit';
-  }
-  return originalFetch.call(this, url, options);
-};
-    const firebaseConfig = {
-  apiKey: "AIzaSyA4r8eifiRWU7W2CUWCymwBtL-HtRp0Nng",
-  authDomain: "uploadphoto-d6606.firebaseapp.com",
-  projectId: "uploadphoto-d6606",
-  storageBucket: "uploadphoto-d6606.firebasestorage.app",
-  messagingSenderId: "495665845197",
-  appId: "1:495665845197:web:9d96d8004e0612ccddaa84",
-  measurementId: "G-MJRZYYMEXB"
-};
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
-    const storage = getStorage(app);
-    const db = getFirestore(app);
+  // Автоматски најави анонимен корисник
+  signInAnonymously(auth)
+    .then(() => {
+      console.log("Најавувањето успешно!");
+      statusDiv.innerHTML = '<p style="color:green;">✓ Подготвено за праќање</p>';
+    })
+    .catch((error) => {
+      console.error("Грешка при најавување:", error);
+      statusDiv.innerHTML = '<p style="color:red;">✗ Грешка при најавување</p>';
+    });
 
-    // Upload function
-    window.uploadFiles = async () => {
-      const input = document.getElementById('files');
-      if (input.files.length === 0) {
-        alert("Мора да избереш барем една слика!");
-        return;
+  uploadBtn.addEventListener("click", async () => {
+    const input = document.getElementById('files');
+    if (!input.files.length) {
+      alert("Мора да избереш барем една слика!");
+      return;
+    }
+
+    // Провери дали корисникот е најавен
+    if (!auth.currentUser) {
+      alert("Се чека најавување... Обиди се повторно за 2 секунди");
+      return;
+    }
+
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = 'Праќање...';
+
+    try {
+      for (let file of input.files) {
+        console.log(`Праќање: ${file.name}`);
+        
+        // Креирај уникатно име за файлот
+        const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+        const storageRef = ref(storage, `uploads/${fileName}`);
+        
+        // Постави metadata
+        const metadata = {
+          contentType: file.type,
+          customMetadata: {
+            'uploadedBy': auth.currentUser.uid,
+            'originalName': file.name
+          }
+        };
+        
+        // Прати ја сликата
+        await uploadBytes(storageRef, file, metadata);
+        console.log(`Пратено: ${file.name}`);
+        
+        // Земи го URL-то
+        const url = await getDownloadURL(storageRef);
+        
+        // Зачувај во Firestore
+        await addDoc(collection(db, "uploadedImages"), {
+          name: file.name,
+          fileName: fileName,
+          url: url,
+          uploadedBy: auth.currentUser.uid,
+          timestamp: serverTimestamp()
+        });
+        
+        console.log(`Зачувано во база: ${file.name}`);
       }
-
-      try {
-        for (let file of input.files) {
-          const storageRef = ref(storage, `uploads/${Date.now()}_${file.name}`);
-          await uploadBytes(storageRef, file);
-          const url = await getDownloadURL(storageRef);
-
-          await addDoc(collection(db, "uploadedImages"), {
-            name: file.name,
-            url: url,
-            timestamp: serverTimestamp()
-          });
-        }
-
-        alert("Сликите се пратени успешно!");
-        input.value = "";
-      } catch (error) {
-        console.error("Грешка при пратување на слики:", error);
-        alert("Настана грешка, проверете конзолата.");
+      
+      alert("Сликите се пратени успешно!");
+      input.value = "";
+      statusDiv.innerHTML = '<p style="color:green;">✓ Успешно пратено!</p>';
+      setTimeout(() => {
+        statusDiv.innerHTML = '<p style="color:green;">✓ Подготвено за праќање</p>';
+      }, 3000);
+      
+    } catch (error) {
+      console.error("Грешка при пратување на слики:", error);
+      
+      // Подетална грешка
+      let errorMessage = "Настана грешка: ";
+      if (error.code === 'storage/unauthorized') {
+        errorMessage += "Немате дозвола за праќање слики.";
+      } else if (error.code === 'storage/canceled') {
+        errorMessage += "Праќањето е откажано.";
+      } else if (error.code === 'storage/unknown') {
+        errorMessage += "Непозната грешка.";
+      } else {
+        errorMessage += error.message;
       }
-    };
-  </script>
+      
+      alert(errorMessage);
+      statusDiv.innerHTML = `<p style="color:red;">✗ ${errorMessage}</p>`;
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = 'Прати';
+    }
+  });
+</script>
 </head>
 <body>
   <h1>Избери слики од твојата галерија</h1>
@@ -79,4 +128,5 @@ window.fetch = function(url, options) {
   <button onclick="uploadFiles()">Прати</button>
 </body>
 </html>
+
 
